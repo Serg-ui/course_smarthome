@@ -3,7 +3,7 @@ from django.views.generic import FormView
 
 from .models import Setting
 from .form import ControllerForm
-from .tasks import smart_home_manager
+
 
 
 class ControllerView(FormView):
