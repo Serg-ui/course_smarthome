@@ -123,7 +123,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.11/howto/static-files/
 
 STATIC_URL = '/static/'
-SMART_HOME_ACCESS_TOKEN = os.getenv('SMART_HOME_ACCESS_TOKEN')
+SMART_HOME_ACCESS_TOKEN = os.getenv('SMART_HOME_ACCESS_TOKEN', 'dac0c65f3d1573b28a0b06b866a9aab267c831cfa0dfa983ff5402bff483003b')
 SMART_HOME_API_URL = os.getenv('SMART_HOME_API_URL', 'http://smarthome.webpython.graders.eldf.ru/api/user.controller')
 EMAIL_HOST  = os.getenv('EMAIL_HOST', 'EMAIL_HOST')
 EMAIL_PORT  = os.getenv('EMAIL_PORT', 'EMAIL_PORT')

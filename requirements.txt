@@ -9,3 +9,4 @@ Django==2.0
 redis
 marshmallow==2.15.1
 jsonschema==2.6.0
+flower==0.9.3
