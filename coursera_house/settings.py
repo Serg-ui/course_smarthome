@@ -27,6 +27,14 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# E-mail
+#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'mail.nic.ru'
+EMAIL_PORT = 465
+EMAIL_HOST_USER = 'robot@palwood.ru'
+EMAIL_HOST_PASSWORD = 'P5kseepu'
+#EMAIL_USE_TLS = True
+EMAIL_USE_SSL = True
 
 # Application definition
 
