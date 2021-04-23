@@ -10,3 +10,4 @@ redis
 marshmallow==2.15.1
 jsonschema==2.6.0
 flower==0.9.3
+responses~=0.9.0

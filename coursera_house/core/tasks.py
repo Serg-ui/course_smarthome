@@ -9,9 +9,11 @@ import redis
 from distutils.util import strtobool
 
 
-red = redis.Redis(host='redis')
+red = redis.Redis(host='redis', decode_responses=True)
 not_controls = ['bedroom_temperature', 'outdoor_light', 'boiler_temperature']
-Notifier.subscribe(Events.smoke_detector.name, [ColdWater, HotWater, WashingMachine, Boiler])
+Notifier.subscribe(Events.bedroom_presence.name, [ColdWater, HotWater, Boiler, WashingMachine])
+Notifier.subscribe(Events.cold_water.name, [ColdWater])
+Notifier.subscribe(Events.hot_water.name, [HotWater])
 
 r = requests.get(settings.SMART_HOME_API_URL, headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
 r = r.json()
@@ -24,8 +26,9 @@ for i in r['data']:
     else:
         controls[i['name']] = str(i['value'])
 
-red.set('data_controls', json.dumps(controls))
-red.set('data_sensors', json.dumps(sensors))
+red.hmset('data_controls', controls)
+
+
 
 @task()
 def smart_home_manager():
@@ -36,6 +39,10 @@ def smart_home_manager():
     r = requests.get(settings.SMART_HOME_API_URL, headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
     r = r.json()
 
+    if red.exists(Controls.key_to_server):
+        print(red.hgetall(Controls.key_to_server))
+        red.delete(Controls.key_to_server)
+
     sensors = {}
     controls = {}
     for i in r['data']:
@@ -44,13 +51,13 @@ def smart_home_manager():
         else:
             controls[i['name']] = str(i['value'])
 
-    controls_from_redis = json.loads(red.get('data_controls'))
+    controls_from_redis = red.hgetall('data_controls')
 
     diff_controls = {k: controls[k] for k in controls if
                      k in controls_from_redis and controls[k] != controls_from_redis[k]}
 
     if diff_controls:
-        red.set('data_controls', json.dumps(controls))
         for k, v in diff_controls.items():
+            red.hset('data_controls', k, v)
             print(f'{k} - {strtobool(v)}')
             Notifier.dispatch(k, bool(strtobool(v)))
