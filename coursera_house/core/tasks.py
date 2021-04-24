@@ -12,8 +12,8 @@ from distutils.util import strtobool
 red = redis.Redis(host='redis', decode_responses=True)
 not_controls = ['bedroom_temperature', 'outdoor_light', 'boiler_temperature']
 Notifier.subscribe(Events.bedroom_presence.name, [ColdWater, HotWater, Boiler, WashingMachine])
-Notifier.subscribe(Events.cold_water.name, [ColdWater])
-Notifier.subscribe(Events.hot_water.name, [HotWater])
+Notifier.subscribe(Events.cold_water.name, [Boiler, WashingMachine])
+Notifier.subscribe(Events.boiler.name, [Boiler])
 
 r = requests.get(settings.SMART_HOME_API_URL, headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
 r = r.json()
@@ -40,7 +40,6 @@ def smart_home_manager():
     r = r.json()
 
     if red.exists(Controls.key_to_server):
-        print(red.hgetall(Controls.key_to_server))
         red.delete(Controls.key_to_server)
 
     sensors = {}
@@ -61,3 +60,5 @@ def smart_home_manager():
             red.hset('data_controls', k, v)
             print(f'{k} - {strtobool(v)}')
             Notifier.dispatch(k, bool(strtobool(v)))
+
+    print(red.hgetall(Controls.key_to_server))
