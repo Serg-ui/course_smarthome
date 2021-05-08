@@ -59,6 +59,9 @@ def smart_home_manager():
         for k, v in diff_controls.items():
             red.hset('data_controls', k, v)
             print(f'{k} - {strtobool(v)}')
-            Notifier.dispatch(k, bool(strtobool(v)))
+            try:
+                Notifier.dispatch(k, bool(strtobool(v)))
+            except ValueError:
+                Notifier.dispatch(k, v)
 
-    print(red.hgetall(Controls.key_to_server))
+    hot_water = Setting.objects.get(controller_name='hot_water_target_temperature').value

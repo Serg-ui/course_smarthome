@@ -24,7 +24,23 @@ class ControllerView(FormView):
         return context
 
     def get_initial(self):
-        return {}
+        return {
+            'bedroom_target_temperature': Setting.safe_get('bedroom_target_temperature'),
+            'hot_water_target_temperature': Setting.objects.get(controller_name='hot_water_target_temperature').value,
+            'bedroom_light': bool(Setting.objects.get(controller_name='bedroom_light').value),
+            'bathroom_light': bool(Setting.objects.get(controller_name='bathroom_light').value)
+        }
 
     def form_valid(self, form):
+        o = Setting.objects.all()
+
+        o.filter(controller_name='bedroom_target_temperature').\
+            update(value=form.__getitem__('bedroom_target_temperature').value())
+        o.filter(controller_name='hot_water_target_temperature').\
+            update(value=form.__getitem__('hot_water_target_temperature').value())
+        o.filter(controller_name='bedroom_light').\
+            update(value=int(form.__getitem__('bedroom_light').value()))
+        o.filter(controller_name='bathroom_light').\
+            update(value=int(form.__getitem__('bathroom_light').value()))
+
         return super(ControllerView, self).form_valid(form)

@@ -35,6 +35,7 @@ class Controls(ABC):
 
 class ColdWater(Controls):
     name = Events.cold_water.name
+
     @classmethod
     def update(cls, event, value):
         if event == Events.bedroom_presence.name:
@@ -63,6 +64,8 @@ class HotWater(Controls):
 class Boiler(Controls):
     name = Events.boiler.name
     DEPENDS = {Events.cold_water.name: 'True'}
+
+
 
     @classmethod
     def update(cls, event, value):

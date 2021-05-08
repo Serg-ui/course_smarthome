@@ -13,6 +13,16 @@ def create_initial_settings(apps, schema_editor):
             controller_name='hot_water_target_temperature',
             label='Желаемая температура горячей воды',
             value=80
+        ),
+        Setting(
+            controller_name='bedroom_light',
+            label='Свет в спальне',
+            value=0
+        ),
+        Setting(
+            controller_name='bathroom_light',
+            label='Свет в ванной',
+            value=0
         )
     ])
 
