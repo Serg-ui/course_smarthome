@@ -8,7 +8,8 @@ red = redis.Redis(host='redis', decode_responses=True)
 
 
 class Controls(ABC):
-    key_controls = 'data_controls'
+    name = ''
+    key_alarms = 'data_alarms'
     key_to_server = 'data_to_server'
 
     ON = 'True'
@@ -38,7 +39,7 @@ class ColdWater(Controls):
 
     @classmethod
     def update(cls, event, value):
-        if event == Events.bedroom_presence.name:
+        if event == Events.leak_detector.name:
             if not value:
                 cls.switch_on()
             cls.leak(value)
@@ -52,7 +53,7 @@ class HotWater(Controls):
 
     @classmethod
     def update(cls, event, value):
-        if event == Events.bedroom_presence.name:
+        if event == Events.leak_detector.name:
             if not value:
                 cls.switch_on()
             cls.leak(value)
@@ -69,12 +70,9 @@ class Boiler(Controls):
 
     @classmethod
     def update(cls, event, value):
-        if event == Events.bedroom_presence.name:
+        if event == Events.leak_detector.name:
             if not value:
-                if red.hget(cls.key_controls, Events.smoke_detector.name) == 'False':
-                    cls.switch_on()
-                else:
-                    print('Невозможно вкл бойлер из-за задымления')
+                pass
 
             cls.leak(value)
 
@@ -85,9 +83,9 @@ class Boiler(Controls):
 
         if event == cls.name:
             if value:
-                water = red.hget(cls.key_controls, Events.cold_water.name)
-                smoke = red.hget(cls.key_controls, Events.smoke_detector.name)
-                leak = red.hget(cls.key_controls, Events.leak_detector.name)
+                water = red.hget(cls.key_alarms, Events.cold_water.name)
+                smoke = red.hget(cls.key_alarms, Events.smoke_detector.name)
+                leak = red.hget(cls.key_alarms, Events.leak_detector.name)
 
                 if water == 'True' and smoke == 'False' and leak == 'False':
                     red.hset(cls.key_to_server, cls.name, cls.ON)
@@ -105,9 +103,9 @@ class WashingMachine(Controls):
 
     @classmethod
     def update(cls, event, value):
-        if event == Events.bedroom_presence.name:
+        if event == Events.leak_detector.name:
             if not value:
-                if red.hget(cls.key_controls, Events.smoke_detector.name) == 'False':
+                if red.hget(cls.key_alarms, Events.smoke_detector.name) == 'False':
                     cls.switch_on()
                 else:
                     print('Невозможно вкл cт. машину из-за задымления')
