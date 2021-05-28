@@ -66,8 +66,6 @@ class Boiler(Controls):
     name = Events.boiler.name
     DEPENDS = {Events.cold_water.name: 'True'}
 
-
-
     @classmethod
     def update(cls, event, value):
         if event == Events.leak_detector.name:
@@ -94,6 +92,7 @@ class Boiler(Controls):
                 red.hset(cls.key_to_server, cls.name, cls.OFF)
                 print('Бойлер выкл')
 
+
 class WashingMachine(Controls):
     name = Events.washing_machine.name
     ON = 'on'
@@ -106,21 +105,33 @@ class WashingMachine(Controls):
         if event == Events.leak_detector.name:
             if not value:
                 if red.hget(cls.key_alarms, Events.smoke_detector.name) == 'False':
-                    cls.switch_on()
+                    #cls.switch_on()
+                    pass
                 else:
                     print('Невозможно вкл cт. машину из-за задымления')
-
-            cls.leak(value)
+            else:
+                if red.hget(cls.key_alarms, cls.name) != cls.BLOCK:
+                    cls.leak(value)
 
         if event == Events.cold_water.name:
             if not value:
                 red.hset(cls.key_to_server, cls.name, cls.OFF)
                 print('Стиральная машина выключена из-за перекрытия холодной воды')
 
+
 class AirConditioner(Controls):
+    name = Events.air_conditioner.name
+
     @classmethod
-    def update(cls, event):
-        pass
+    def update(cls, event, value):
+        if event == cls.name:
+
+            if value:
+                smoke = red.hget(cls.key_alarms, Events.smoke_detector.name)
+                if smoke == 'False':
+                    red.hset(cls.key_to_server, cls.name, cls.ON)
+            else:
+                red.hset(cls.key_to_server, cls.name, cls.OFF)
 
 
 class BedroomLight(Controls):

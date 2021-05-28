@@ -18,6 +18,7 @@ class Events(Enum):
     boiler = 10
     washing_machine = 11
     bedroom_presence = 12
+    air_conditioner = 13
 
 class Notifier:
     subscribers = {event: set() for event in [event.name for event in Events]}

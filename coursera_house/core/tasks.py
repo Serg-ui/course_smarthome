@@ -7,6 +7,7 @@ import json
 from .Controls import *
 import redis
 from distutils.util import strtobool
+import operator
 
 default_alarms = {
     'smoke_detector': 'False',
@@ -32,11 +33,15 @@ def get_data():
     except requests.exceptions.RequestException as e:
         raise SystemExit(e)
 
+    return sort_data(r)
+
+
+def sort_data(data):
     alarms = {}
     sensors = {}
     controls = {}
 
-    for i in r['data']:
+    for i in data['data']:
         if i['name'] in not_controls:
             sensors[i['name']] = str(i['value'])
         elif i['name'] in events:
@@ -81,30 +86,48 @@ def smart_home_manager():
             except ValueError:
                 Notifier.dispatch(k, v)
 
-    keep('hot_water_target_temperature', 'boiler_temperature', Boiler)
+    keep('hot_water_target_temperature', 'boiler_temperature', Boiler,
+         ops={'<': operator.lt, '>': operator.gt})
+    keep('bedroom_target_temperature', 'bedroom_temperature', AirConditioner,
+         ops={'>': operator.lt, '<': operator.gt})
+
+    data_to_server = red.hgetall(Controls.key_to_server)
+    if data_to_server:
+        print(data_to_server)
+        send_post(data_to_server)
 
 
-def send_post(name, value):
+def send_post(data):
     data2 = {
         "controllers": []
     }
-    data2['controllers'].append({'name': name, 'value': value})
+    #data2['controllers'].append({'name': name, 'value': value})
+    for k, v in data.items():
+        data2['controllers'].append({'name': k, 'value': v})
+
+
     try:
         r = requests.post(settings.SMART_HOME_API_URL, headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'}, data=json.dumps(data2))
-        print(r.status_code)
+        data = sort_data(r.json())
+        red.hmset('data_controls', data['controls'])
+        red.hmset('data_alarms', data['alarms'])
     except requests.exceptions.RequestException as e:
         raise SystemExit(e)
 
 
-def keep(target, current, obj):
+def keep(target, current, obj, ops):
+
     try:
         target2 = int(Setting.objects.get(controller_name=target).value)
         current2 = int(data_from_server['sensors'][current])
-        if current2 < target2 * 0.9 and not strtobool(data_from_server['controls'][obj.name]):
+
+        if ops['<'](current2, target2 * 0.9) and not strtobool(data_from_server['controls'][obj.name]):
             print(f'нужно вкл {obj.name}')
-            send_post(obj.name, True)
-        elif current2 > target2 * 1.1 and strtobool(data_from_server['controls'][obj.name]):
+            obj.update(obj.name, True)
+            #send_post(obj.name, True)
+        elif ops['>'](current2, target2 * 1.1) and strtobool(data_from_server['controls'][obj.name]):
             print(f'нужно выкл {obj.name}')
-            send_post(obj.name, False)
+            obj.update(obj.name, False)
+            #send_post(obj.name, False)
     except ValueError:
         pass
