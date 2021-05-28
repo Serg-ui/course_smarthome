@@ -23,6 +23,7 @@ not_controls = ['bedroom_temperature', 'outdoor_light', 'boiler_temperature']
 Notifier.subscribe(Events.leak_detector.name, [ColdWater, HotWater, Boiler, WashingMachine])
 Notifier.subscribe(Events.cold_water.name, [Boiler, WashingMachine])
 Notifier.subscribe(Events.boiler.name, [Boiler])
+Notifier.subscribe(Events.smoke_detector.name, [AirConditioner, Boiler, WashingMachine, BedroomLight])
 
 
 def get_data():
@@ -58,7 +59,6 @@ red.hmset('data_alarms', default_alarms)
 del tmp_data
 
 
-
 @task()
 def smart_home_manager():
     # Здесь ваш код для проверки условий
@@ -70,7 +70,6 @@ def smart_home_manager():
 
     if red.exists(Controls.key_to_server):
         red.delete(Controls.key_to_server)
-
 
     alarms_from_redis = red.hgetall('data_alarms')
 
@@ -91,6 +90,8 @@ def smart_home_manager():
     keep('bedroom_target_temperature', 'bedroom_temperature', AirConditioner,
          ops={'>': operator.lt, '<': operator.gt})
 
+    lights()
+
     data_to_server = red.hgetall(Controls.key_to_server)
     if data_to_server:
         print(data_to_server)
@@ -101,10 +102,9 @@ def send_post(data):
     data2 = {
         "controllers": []
     }
-    #data2['controllers'].append({'name': name, 'value': value})
+
     for k, v in data.items():
         data2['controllers'].append({'name': k, 'value': v})
-
 
     try:
         r = requests.post(settings.SMART_HOME_API_URL, headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'}, data=json.dumps(data2))
@@ -122,12 +122,27 @@ def keep(target, current, obj, ops):
         current2 = int(data_from_server['sensors'][current])
 
         if ops['<'](current2, target2 * 0.9) and not strtobool(data_from_server['controls'][obj.name]):
-            print(f'нужно вкл {obj.name}')
             obj.update(obj.name, True)
-            #send_post(obj.name, True)
+
         elif ops['>'](current2, target2 * 1.1) and strtobool(data_from_server['controls'][obj.name]):
-            print(f'нужно выкл {obj.name}')
             obj.update(obj.name, False)
-            #send_post(obj.name, False)
+
     except ValueError:
         pass
+
+
+def lights():
+    outdoor_light = int(data_from_server['sensors']['outdoor_light'])
+    current_from_server = data_from_server['controls']['curtains']
+    bedroom_light = strtobool(data_from_server['controls']['bedroom_light'])
+    bedroom_light_db = Setting.objects.get(controller_name='bedroom_light')
+
+
+
+    if bedroom_light_db.value != bedroom_light:
+        BedroomLight.update(BedroomLight.name, bedroom_light_db.value)
+
+    if outdoor_light < 50:
+        Curtains.on(current_from_server)
+    else:
+        Curtains.off(current_from_server)

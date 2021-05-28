@@ -9,7 +9,7 @@ class Events(Enum):
     leak_detector = 1
     cold_water = 2
     water_temp = 3
-    curtains_manual_mode = 4
+    curtains = 4
     outdoor_dark = 5
     outdoor_light_or_bedroom_light_on = 6
     smoke_detector = 7
@@ -19,6 +19,9 @@ class Events(Enum):
     washing_machine = 11
     bedroom_presence = 12
     air_conditioner = 13
+    bedroom_light = 14
+    bathroom_light = 15
+
 
 class Notifier:
     subscribers = {event: set() for event in [event.name for event in Events]}

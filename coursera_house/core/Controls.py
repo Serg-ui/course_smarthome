@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from .Events import *
 from django.core.mail import send_mail
 import redis
+from .models import Setting
 
 
 red = redis.Redis(host='redis', decode_responses=True)
@@ -11,6 +12,7 @@ class Controls(ABC):
     name = ''
     key_alarms = 'data_alarms'
     key_to_server = 'data_to_server'
+    key_controls = 'data_controls'
 
     ON = 'True'
     OFF = 'False'
@@ -92,6 +94,10 @@ class Boiler(Controls):
                 red.hset(cls.key_to_server, cls.name, cls.OFF)
                 print('Бойлер выкл')
 
+        if event == Events.smoke_detector.name:
+            if value:
+                red.hset(cls.key_to_server, cls.name, cls.OFF)
+
 
 class WashingMachine(Controls):
     name = Events.washing_machine.name
@@ -118,6 +124,11 @@ class WashingMachine(Controls):
                 red.hset(cls.key_to_server, cls.name, cls.OFF)
                 print('Стиральная машина выключена из-за перекрытия холодной воды')
 
+        if event == Events.smoke_detector.name:
+            if value:
+                if red.hget(cls.key_alarms, cls.name) != cls.BLOCK:
+                    red.hset(cls.key_to_server, cls.name, cls.OFF)
+
 
 class AirConditioner(Controls):
     name = Events.air_conditioner.name
@@ -125,7 +136,6 @@ class AirConditioner(Controls):
     @classmethod
     def update(cls, event, value):
         if event == cls.name:
-
             if value:
                 smoke = red.hget(cls.key_alarms, Events.smoke_detector.name)
                 if smoke == 'False':
@@ -133,20 +143,62 @@ class AirConditioner(Controls):
             else:
                 red.hset(cls.key_to_server, cls.name, cls.OFF)
 
+        if event == Events.smoke_detector.name:
+            if value:
+                red.hset(cls.key_to_server, cls.name, cls.OFF)
 
-class BedroomLight(Controls):
+
+class LightBase(Controls):
     @classmethod
-    def update(cls, event):
-        pass
+    def update(cls, event, value):
+        if event == cls.name:
+            if value:
+                if red.hget(cls.key_alarms, Events.smoke_detector.name) == 'False':
+                    red.hset(cls.key_to_server, cls.name, cls.ON)
+                    current_db = Setting.objects.get(controller_name=cls.name)
+                    current_db.value = 1
+                    current_db.save()
+            else:
+                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                current_db = Setting.objects.get(controller_name=cls.name)
+                current_db.value = 0
+                current_db.save()
+
+        if event == Events.smoke_detector.name:
+            if value:
+                if red.hget(cls.key_controls, cls.name) != cls.OFF:
+                    red.hset(cls.key_to_server, cls.name, cls.OFF)
+                    current_db = Setting.objects.get(controller_name=cls.name)
+                    current_db.value = 0
+                    current_db.save()
 
 
-class BathroomLight(Controls):
-    @classmethod
-    def update(cls, event):
-        pass
+class BedroomLight(LightBase):
+    name = Events.bedroom_light.name
+
+
+class BathroomLight(LightBase):
+    name = Events.bathroom_light.name
 
 
 class Curtains(Controls):
+    name = Events.curtains.name
+    ON = 'open'
+    OFF = 'close'
+    BLOCK = 'slightly_open'
+
     @classmethod
     def update(cls, event):
         pass
+
+    @classmethod
+    def on(cls, value):
+        if value != cls.BLOCK and value != cls.ON:
+            red.hset(cls.key_to_server, cls.name, cls.ON)
+
+    @classmethod
+    def off(cls, value):
+        if value != cls.BLOCK and value != cls.OFF:
+            red.hset(cls.key_to_server, cls.name, cls.OFF)
+
+
