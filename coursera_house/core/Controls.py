@@ -193,12 +193,12 @@ class Curtains(Controls):
 
     @classmethod
     def on(cls, value):
-        if value != cls.BLOCK and value != cls.ON:
+        if value != cls.BLOCK and value != cls.ON and red.hget(cls.key_controls, BedroomLight.name) == BedroomLight.OFF:
             red.hset(cls.key_to_server, cls.name, cls.ON)
 
     @classmethod
     def off(cls, value):
-        if value != cls.BLOCK and value != cls.OFF:
+        if value != cls.BLOCK and value != cls.OFF and red.hget(cls.key_controls, BedroomLight.name) == BedroomLight.ON:
             red.hset(cls.key_to_server, cls.name, cls.OFF)
 
 

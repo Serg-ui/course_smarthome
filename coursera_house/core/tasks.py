@@ -23,7 +23,7 @@ not_controls = ['bedroom_temperature', 'outdoor_light', 'boiler_temperature']
 Notifier.subscribe(Events.leak_detector.name, [ColdWater, HotWater, Boiler, WashingMachine])
 Notifier.subscribe(Events.cold_water.name, [Boiler, WashingMachine])
 Notifier.subscribe(Events.boiler.name, [Boiler])
-Notifier.subscribe(Events.smoke_detector.name, [AirConditioner, Boiler, WashingMachine, BedroomLight])
+Notifier.subscribe(Events.smoke_detector.name, [AirConditioner, Boiler, WashingMachine, BedroomLight, BathroomLight])
 
 
 def get_data():
@@ -61,9 +61,7 @@ del tmp_data
 
 @task()
 def smart_home_manager():
-    # Здесь ваш код для проверки условий
     # docker exec -it final_web_1 celery -A coursera_house worker -B -l info
-    # docker exec -it final_web_1 flower -A coursera_house --port=5555 --broker=redis://redis:6379
 
     global data_from_server
     data_from_server = get_data()
@@ -134,13 +132,20 @@ def keep(target, current, obj, ops):
 def lights():
     outdoor_light = int(data_from_server['sensors']['outdoor_light'])
     current_from_server = data_from_server['controls']['curtains']
+
     bedroom_light = strtobool(data_from_server['controls']['bedroom_light'])
     bedroom_light_db = Setting.objects.get(controller_name='bedroom_light')
+
+    bathroom_light = strtobool(data_from_server['controls']['bathroom_light'])
+    bathroom_light_db = Setting.objects.get(controller_name='bathroom_light')
 
 
 
     if bedroom_light_db.value != bedroom_light:
         BedroomLight.update(BedroomLight.name, bedroom_light_db.value)
+
+    if bathroom_light_db.value != bathroom_light:
+        BathroomLight.update(BathroomLight.name, bathroom_light_db.value)
 
     if outdoor_light < 50:
         Curtains.on(current_from_server)
