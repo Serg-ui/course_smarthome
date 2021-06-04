@@ -8,14 +8,8 @@ from .Controls import *
 import redis
 from distutils.util import strtobool
 import operator
+import random
 
-default_alarms = {
-    'smoke_detector': 'False',
-    'cold_water': 'False',
-    'washing_machine': 'off',
-    'leak_detector': 'False'}
-
-red = redis.Redis(host='redis', decode_responses=True)
 
 events = ['leak_detector', 'cold_water', 'smoke_detector', 'washing_machine']
 not_controls = ['bedroom_temperature', 'outdoor_light', 'boiler_temperature']
@@ -53,47 +47,34 @@ def sort_data(data):
     return {'sensors': sensors, 'controls': controls, 'alarms': alarms}
 
 
-tmp_data = get_data()
-red.hmset('data_controls', tmp_data['controls'])
-red.hmset('data_alarms', default_alarms)
-del tmp_data
+
 
 
 @task()
 def smart_home_manager():
     # docker exec -it final_web_1 celery -A coursera_house worker -B -l info
 
+    # docker exec -it final_web_1 celery -A coursera_house.celery:app worker --pool=solo -l info
+    # docker exec -it final_web_1 celery -A coursera_house.celery:app beat -l info
+
     global data_from_server
-    data_from_server = get_data()
+    global default_alarms
 
-    if red.exists(Controls.key_to_server):
-        red.delete(Controls.key_to_server)
+    Data.data = get_data()
+    if Data.data['alarms'] != Data.default_alarms:
+        Data.default_alarms = Data.data['alarms']
+        print(Data.default_alarms)
 
-    alarms_from_redis = red.hgetall('data_alarms')
 
-    diff_alarms = {k: data_from_server['alarms'][k] for k in data_from_server['alarms'] if
-                     k in alarms_from_redis and data_from_server['alarms'][k] != alarms_from_redis[k]}
 
-    if diff_alarms:
-        for k, v in diff_alarms.items():
-            red.hset('data_alarms', k, v)
-            print(f'{k} - {v}')
-            try:
-                Notifier.dispatch(k, bool(strtobool(v)))
-            except ValueError:
-                Notifier.dispatch(k, v)
 
-    keep('hot_water_target_temperature', 'boiler_temperature', Boiler,
-         ops={'<': operator.lt, '>': operator.gt})
-    keep('bedroom_target_temperature', 'bedroom_temperature', AirConditioner,
-         ops={'>': operator.lt, '<': operator.gt})
 
-    lights()
 
-    data_to_server = red.hgetall(Controls.key_to_server)
-    if data_to_server:
-        print(data_to_server)
-        send_post(data_to_server)
+
+
+
+
+
 
 
 def send_post(data):

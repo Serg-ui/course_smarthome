@@ -5,6 +5,29 @@ import redis
 from .models import Setting
 
 
+class Data:
+    data = {}
+    default_alarms = {
+        'smoke_detector': 'False',
+        'cold_water': 'False',
+        'washing_machine': 'off',
+        'leak_detector': 'False'}
+    data_to_server = {}
+
+    @classmethod
+    def hget(cls, key1, key2):
+        return cls.data[key1].get(key2)
+
+    @classmethod
+    def hset(cls, key, val):
+        cls.data_to_server[key] = val
+
+    @classmethod
+    def clear(cls):
+        cls.data_to_server = {}
+
+
+
 red = redis.Redis(host='redis', decode_responses=True)
 
 
