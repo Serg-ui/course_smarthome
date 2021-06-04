@@ -57,13 +57,10 @@ def smart_home_manager():
     # docker exec -it final_web_1 celery -A coursera_house.celery:app worker --pool=solo -l info
     # docker exec -it final_web_1 celery -A coursera_house.celery:app beat -l info
 
-    global data_from_server
-    global default_alarms
 
     Data.data = get_data()
-    if Data.data['alarms'] != Data.default_alarms:
-        Data.default_alarms = Data.data['alarms']
-        print(Data.default_alarms)
+
+    print(Data.compare())
 
 
 

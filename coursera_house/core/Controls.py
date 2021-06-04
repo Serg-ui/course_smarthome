@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from .Events import *
 from django.core.mail import send_mail
-import redis
+
 from .models import Setting
 
 
@@ -26,9 +26,18 @@ class Data:
     def clear(cls):
         cls.data_to_server = {}
 
+    @classmethod
+    def compare(cls):
+        diff = {k: cls.data['alarms'][k] for k in cls.data['alarms'] if
+                    k in cls.default_alarms and cls.data['alarms'][k] != cls.default_alarms[k]}
+        if diff:
+            cls.default_alarms = cls.data['alarms']
+
+        return diff
 
 
-red = redis.Redis(host='redis', decode_responses=True)
+
+
 
 
 class Controls(ABC):
@@ -47,13 +56,13 @@ class Controls(ABC):
 
     @classmethod
     def switch_on(cls):
-        red.hset(cls.key_to_server, cls.name, cls.ON)
+        Data.hset(cls.name, cls.ON)
         print(f'{cls.name} - Включен')
 
     @classmethod
     def leak(cls, value):
         if value:
-            red.hset(cls.key_to_server, cls.name, cls.OFF)
+            Data.hset(cls.name, cls.OFF)
             print(f'Протечка, {cls.name} - False')
         else:
             print(f'Протечка устранена, {cls.name}')
@@ -101,25 +110,25 @@ class Boiler(Controls):
 
         if event == Events.cold_water.name:
             if not value:
-                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                Data.hset(cls.name, cls.OFF)
                 print('Бойлер выключен из-за перекрытия холодной воды')
 
         if event == cls.name:
             if value:
-                water = red.hget(cls.key_alarms, Events.cold_water.name)
-                smoke = red.hget(cls.key_alarms, Events.smoke_detector.name)
-                leak = red.hget(cls.key_alarms, Events.leak_detector.name)
+                water = Data.hget(cls.key_alarms, Events.cold_water.name)
+                smoke = Data.hget(cls.key_alarms, Events.smoke_detector.name)
+                leak = Data.hget(cls.key_alarms, Events.leak_detector.name)
 
                 if water == 'True' and smoke == 'False' and leak == 'False':
-                    red.hset(cls.key_to_server, cls.name, cls.ON)
+                    Data.hset(cls.name, cls.ON)
                     print('Бойлер вкл')
             else:
-                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                Data.hset(cls.name, cls.OFF)
                 print('Бойлер выкл')
 
         if event == Events.smoke_detector.name:
             if value:
-                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                Data.hset(cls.name, cls.OFF)
 
 
 class WashingMachine(Controls):
@@ -133,24 +142,24 @@ class WashingMachine(Controls):
     def update(cls, event, value):
         if event == Events.leak_detector.name:
             if not value:
-                if red.hget(cls.key_alarms, Events.smoke_detector.name) == 'False':
+                if Data.hget(cls.key_alarms, Events.smoke_detector.name) == 'False':
                     #cls.switch_on()
                     pass
                 else:
                     print('Невозможно вкл cт. машину из-за задымления')
             else:
-                if red.hget(cls.key_alarms, cls.name) != cls.BLOCK:
+                if Data.hget(cls.key_alarms, cls.name) != cls.BLOCK:
                     cls.leak(value)
 
         if event == Events.cold_water.name:
             if not value:
-                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                Data.hset(cls.name, cls.OFF)
                 print('Стиральная машина выключена из-за перекрытия холодной воды')
 
         if event == Events.smoke_detector.name:
             if value:
-                if red.hget(cls.key_alarms, cls.name) != cls.BLOCK:
-                    red.hset(cls.key_to_server, cls.name, cls.OFF)
+                if Data.hget(cls.key_alarms, cls.name) != cls.BLOCK:
+                    Data.hset(cls.name, cls.OFF)
 
 
 class AirConditioner(Controls):
@@ -160,15 +169,15 @@ class AirConditioner(Controls):
     def update(cls, event, value):
         if event == cls.name:
             if value:
-                smoke = red.hget(cls.key_alarms, Events.smoke_detector.name)
+                smoke = Data.hget(cls.key_alarms, Events.smoke_detector.name)
                 if smoke == 'False':
-                    red.hset(cls.key_to_server, cls.name, cls.ON)
+                    Data.hset(cls.name, cls.ON)
             else:
-                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                Data.hset(cls.name, cls.OFF)
 
         if event == Events.smoke_detector.name:
             if value:
-                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                Data.hset(cls.name, cls.OFF)
 
 
 class LightBase(Controls):
@@ -176,21 +185,21 @@ class LightBase(Controls):
     def update(cls, event, value):
         if event == cls.name:
             if value:
-                if red.hget(cls.key_alarms, Events.smoke_detector.name) == 'False':
-                    red.hset(cls.key_to_server, cls.name, cls.ON)
+                if Data.hget(cls.key_alarms, Events.smoke_detector.name) == 'False':
+                    Data.hset(cls.name, cls.ON)
                     current_db = Setting.objects.get(controller_name=cls.name)
                     current_db.value = 1
                     current_db.save()
             else:
-                red.hset(cls.key_to_server, cls.name, cls.OFF)
+                Data.hset(cls.name, cls.OFF)
                 current_db = Setting.objects.get(controller_name=cls.name)
                 current_db.value = 0
                 current_db.save()
 
         if event == Events.smoke_detector.name:
             if value:
-                if red.hget(cls.key_controls, cls.name) != cls.OFF:
-                    red.hset(cls.key_to_server, cls.name, cls.OFF)
+                if Data.hget(cls.key_controls, cls.name) != cls.OFF:
+                    Data.hset(cls.name, cls.OFF)
                     current_db = Setting.objects.get(controller_name=cls.name)
                     current_db.value = 0
                     current_db.save()
@@ -216,12 +225,12 @@ class Curtains(Controls):
 
     @classmethod
     def on(cls, value):
-        if value != cls.BLOCK and value != cls.ON and red.hget(cls.key_controls, BedroomLight.name) == BedroomLight.OFF:
-            red.hset(cls.key_to_server, cls.name, cls.ON)
+        if value != cls.BLOCK and value != cls.ON and Data.hget(cls.key_controls, BedroomLight.name) == BedroomLight.OFF:
+            Data.hset(cls.name, cls.ON)
 
     @classmethod
     def off(cls, value):
-        if value != cls.BLOCK and value != cls.OFF and red.hget(cls.key_controls, BedroomLight.name) == BedroomLight.ON:
-            red.hset(cls.key_to_server, cls.name, cls.OFF)
+        if value != cls.BLOCK and value != cls.OFF and Data.hget(cls.key_controls, BedroomLight.name) == BedroomLight.ON:
+            Data.hset(cls.name, cls.OFF)
 
 
