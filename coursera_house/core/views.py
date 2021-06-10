@@ -1,3 +1,5 @@
+import json
+
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import reverse_lazy
@@ -10,47 +12,57 @@ from django.forms.models import model_to_dict
 
 
 class ControllerView(View):
-    def get_data_from_server(self):
+    def get_data(self):
+        air_temp = Setting.objects.get(controller_name='bedroom_target_temperature').value
+        water_temp = Setting.objects.get(controller_name='hot_water_target_temperature').value
+        return {'bedroom_target_temperature': air_temp, 'hot_water_target_temperature': water_temp}
 
-        data = requests.get(settings.SMART_HOME_API_URL,
-                            headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
-        data_json = data.json()
+    def get_data_from_server(self):
+        try:
+            data = requests.get(settings.SMART_HOME_API_URL,
+                                headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
+        except requests.exceptions.RequestException:
+            return 'error'
 
         if data.status_code != 200:
-            raise requests.exceptions.RequestException
+            return 'error'
+
+        try:
+            data_json = data.json()
+        except json.JSONDecodeError:
+            return 'error'
 
         return {k['name']: k['value'] for k in data_json['data']}
 
-
     def get(self, request):
 
-        form = ControllerForm()
-        try:
-            data = self.get_data_from_server()
-        except requests.exceptions.RequestException:
+        data = self.get_data_from_server()
+        if data == 'error':
             return HttpResponse('bad gateway', status=502)
+
+        form_data = self.get_data()
+        form_data['bedroom_light'] = data['bedroom_light']
+        form_data['bathroom_light'] = data['bathroom_light']
+
+        form = ControllerForm(form_data)
 
         return render(request, 'core/control.html', {'form': form, 'data': data})
 
     def post(self, request):
         form = ControllerForm(request.POST)
-
-        try:
-            data = self.get_data_from_server()
-        except requests.exceptions.RequestException:
-            return HttpResponse('bad gateway', status=502)
+        data = {}
 
         if form.is_valid():
+            data = self.get_data_from_server()
+            if data == 'error':
+                return HttpResponse('bad gateway', status=502)
+
             clean = form.cleaned_data
 
             Setting.objects.filter(controller_name='bedroom_target_temperature').update(
                 value=clean['bedroom_target_temperature'])
             Setting.objects.filter(controller_name='hot_water_target_temperature').update(
                 value=clean['hot_water_target_temperature'])
-            Setting.objects.filter(controller_name='bedroom_light').update(
-                value=clean['bedroom_light'])
-            Setting.objects.filter(controller_name='bathroom_light').update(
-                value=clean['bathroom_light'])
 
         return render(request, 'core/control.html', {'form': form, 'data': data})
 
@@ -64,7 +76,7 @@ class ControllerView2(FormView):
         context = super(ControllerView2, self).get_context_data()
 
         data = requests.get(settings.SMART_HOME_API_URL,
-                         headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
+                            headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
 
         data = data.json()
 
@@ -82,13 +94,13 @@ class ControllerView2(FormView):
     def form_valid(self, form):
         o = Setting.objects.all()
 
-        o.filter(controller_name='bedroom_target_temperature').\
+        o.filter(controller_name='bedroom_target_temperature'). \
             update(value=form.__getitem__('bedroom_target_temperature').value())
-        o.filter(controller_name='hot_water_target_temperature').\
+        o.filter(controller_name='hot_water_target_temperature'). \
             update(value=form.__getitem__('hot_water_target_temperature').value())
-        o.filter(controller_name='bedroom_light').\
+        o.filter(controller_name='bedroom_light'). \
             update(value=int(form.__getitem__('bedroom_light').value()))
-        o.filter(controller_name='bathroom_light').\
+        o.filter(controller_name='bathroom_light'). \
             update(value=int(form.__getitem__('bathroom_light').value()))
 
         return super(ControllerView2, self).form_valid(form)

@@ -10,7 +10,6 @@ from distutils.util import strtobool
 import operator
 import random
 
-
 events = ['leak_detector', 'cold_water', 'smoke_detector', 'washing_machine']
 not_controls = ['bedroom_temperature', 'outdoor_light', 'boiler_temperature']
 
@@ -22,13 +21,20 @@ Notifier.subscribe(Events.smoke_detector.name, [AirConditioner, Boiler, WashingM
 
 def get_data():
     try:
-        r = requests.get(settings.SMART_HOME_API_URL,
-                         headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
-        r = r.json()
-    except requests.exceptions.RequestException as e:
-        raise SystemExit(e)
+        data = requests.get(settings.SMART_HOME_API_URL,
+                            headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'})
+    except requests.exceptions.RequestException:
+        return 'error'
 
-    return sort_data(r)
+    if data.status_code != 200:
+        return 'error'
+
+    try:
+        data_json = data.json()
+    except json.JSONDecodeError:
+        return 'error'
+
+    return sort_data(data_json)
 
 
 def sort_data(data):
@@ -47,9 +53,6 @@ def sort_data(data):
     return {'sensors': sensors, 'controls': controls, 'alarms': alarms}
 
 
-
-
-
 @task()
 def smart_home_manager():
     # docker exec -it final_web_1 celery -A coursera_house worker -B -l info
@@ -57,21 +60,31 @@ def smart_home_manager():
     # docker exec -it final_web_1 celery -A coursera_house.celery:app worker --pool=solo -l info
     # docker exec -it final_web_1 celery -A coursera_house.celery:app beat -l info
 
+    Data.clear()
+    d = get_data()
+    if d == 'error':
+        return
 
-    Data.data = get_data()
+    Data.data = d
 
-    print(Data.compare())
+    diff_alarms = Data.compare()
+    if diff_alarms:
+        for k, v in diff_alarms.items():
+            print(f'{k} - {v}')
+            try:
+                Notifier.dispatch(k, bool(strtobool(v)))
+            except ValueError:
+                Notifier.dispatch(k, v)
 
+    keep('hot_water_target_temperature', 'boiler_temperature', Boiler,
+         ops={'<': operator.lt, '>': operator.gt})
+    keep('bedroom_target_temperature', 'bedroom_temperature', AirConditioner,
+         ops={'>': operator.lt, '<': operator.gt})
 
-
-
-
-
-
-
-
-
-
+    lights()
+    if Data.data_to_server:
+        print(Data.data_to_server)
+        send_post(Data.data_to_server)
 
 
 def send_post(data):
@@ -80,27 +93,37 @@ def send_post(data):
     }
 
     for k, v in data.items():
+        not_bool = ['on', 'off']
+        if v not in not_bool:
+            try:
+                v = bool(strtobool(v))
+            except ValueError:
+                pass
+
         data2['controllers'].append({'name': k, 'value': v})
 
     try:
-        r = requests.post(settings.SMART_HOME_API_URL, headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'}, data=json.dumps(data2))
+        r = requests.post(settings.SMART_HOME_API_URL,
+                          headers={'authorization': f'Bearer {settings.SMART_HOME_ACCESS_TOKEN}'},
+                          data=json.dumps(data2))
         data = sort_data(r.json())
-        red.hmset('data_controls', data['controls'])
-        red.hmset('data_alarms', data['alarms'])
+
+        Data.data = data
+        Data.default_alarms = data['alarms']
+
     except requests.exceptions.RequestException as e:
         raise SystemExit(e)
 
 
 def keep(target, current, obj, ops):
-
     try:
         target2 = int(Setting.objects.get(controller_name=target).value)
-        current2 = int(data_from_server['sensors'][current])
+        current2 = int(Data.data['sensors'][current])
 
-        if ops['<'](current2, target2 * 0.9) and not strtobool(data_from_server['controls'][obj.name]):
+        if ops['<'](current2, target2 * 0.9) and not strtobool(Data.data['controls'][obj.name]):
             obj.update(obj.name, True)
 
-        elif ops['>'](current2, target2 * 1.1) and strtobool(data_from_server['controls'][obj.name]):
+        elif ops['>'](current2, target2 * 1.1) and strtobool(Data.data['controls'][obj.name]):
             obj.update(obj.name, False)
 
     except ValueError:
@@ -108,22 +131,8 @@ def keep(target, current, obj, ops):
 
 
 def lights():
-    outdoor_light = int(data_from_server['sensors']['outdoor_light'])
-    current_from_server = data_from_server['controls']['curtains']
-
-    bedroom_light = strtobool(data_from_server['controls']['bedroom_light'])
-    bedroom_light_db = Setting.objects.get(controller_name='bedroom_light')
-
-    bathroom_light = strtobool(data_from_server['controls']['bathroom_light'])
-    bathroom_light_db = Setting.objects.get(controller_name='bathroom_light')
-
-
-
-    if bedroom_light_db.value != bedroom_light:
-        BedroomLight.update(BedroomLight.name, bedroom_light_db.value)
-
-    if bathroom_light_db.value != bathroom_light:
-        BathroomLight.update(BathroomLight.name, bathroom_light_db.value)
+    outdoor_light = int(Data.data['sensors']['outdoor_light'])
+    current_from_server = Data.data['controls']['curtains']
 
     if outdoor_light < 50:
         Curtains.on(current_from_server)

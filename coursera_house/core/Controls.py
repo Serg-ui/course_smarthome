@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from .Events import *
 from django.core.mail import send_mail
-
+from django.conf import settings
 from .models import Setting
 
 
@@ -9,7 +9,7 @@ class Data:
     data = {}
     default_alarms = {
         'smoke_detector': 'False',
-        'cold_water': 'False',
+        'cold_water': 'True',
         'washing_machine': 'off',
         'leak_detector': 'False'}
     data_to_server = {}
@@ -42,9 +42,9 @@ class Data:
 
 class Controls(ABC):
     name = ''
-    key_alarms = 'data_alarms'
+    key_alarms = 'alarms'
     key_to_server = 'data_to_server'
-    key_controls = 'data_controls'
+    key_controls = 'controls'
 
     ON = 'True'
     OFF = 'False'
@@ -75,8 +75,18 @@ class ColdWater(Controls):
     def update(cls, event, value):
         if event == Events.leak_detector.name:
             if not value:
-                cls.switch_on()
+                #cls.switch_on()
+                pass
             cls.leak(value)
+            '''
+            send_mail(
+                'leak detector',
+                'leak detector = true',
+                'from@smarthome.com',
+                [settings.EMAIL_RECEPIENT],
+                fail_silently=False,
+            )
+            '''
 
         if event == cls.name:
             pass
@@ -89,7 +99,8 @@ class HotWater(Controls):
     def update(cls, event, value):
         if event == Events.leak_detector.name:
             if not value:
-                cls.switch_on()
+                #cls.switch_on()
+                pass
             cls.leak(value)
 
         if event == cls.name:
