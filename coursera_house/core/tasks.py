@@ -1,14 +1,13 @@
 from __future__ import absolute_import, unicode_literals
 from celery import task
-from django.conf import settings
 from .models import Setting
 import requests
 import json
 from .Controls import *
 from distutils.util import strtobool
-import operator
 
-events = ['leak_detector', 'cold_water', 'smoke_detector', 'washing_machine']
+
+events = ['leak_detector', 'cold_water', 'smoke_detector']
 not_controls = ['bedroom_temperature', 'outdoor_light', 'boiler_temperature']
 
 Notifier.subscribe(Events.leak_detector.name, [ColdWater, HotWater, Boiler, WashingMachine])
@@ -64,21 +63,14 @@ def smart_home_manager():
 
     Data.data = d
 
-    diff_alarms = Data.compare()
+    diff_alarms = Data.compare_alarms()
     if diff_alarms:
         for k, v in diff_alarms.items():
-            #print(f'{k} - {v}')
-            try:
-                Notifier.dispatch(k, bool(strtobool(v)))
-            except ValueError:
-                Notifier.dispatch(k, v)
+            print(f'{k} - {v}')
+            Notifier.dispatch(k, bool(strtobool(v)))
 
-    keep('hot_water_target_temperature', 'boiler_temperature', Boiler,
-         ops={'<': operator.lt, '>': operator.gt})
-
-    keep('bedroom_target_temperature', 'bedroom_temperature', AirConditioner,
-         ops={'>': operator.lt, '<': operator.gt})
-
+    bedroom_temp()
+    air_temp()
     curtains()
 
     if Data.data_to_server:
@@ -114,19 +106,24 @@ def send_post(data):
         raise SystemExit(e)
 
 
-def keep(target, current, obj, ops):
-    try:
-        target2 = int(Setting.objects.get(controller_name=target).value)
-        current2 = int(Data.data['sensors'][current])
+def air_temp():
+    current = int(Data.data['sensors']['bedroom_temperature'])
+    target = int(Setting.objects.get(controller_name='bedroom_target_temperature').value)
 
-        if ops['<'](current2, target2 * 0.9) and not strtobool(Data.data['controls'][obj.name]):
-            obj.update(obj.name, True)
+    if current > int(target * 1.1):
+        AirConditioner.update(AirConditioner.name, True)
+    elif current < int(target * 0.9):
+        AirConditioner.update(AirConditioner.name, False)
 
-        elif ops['>'](current2, target2 * 1.1) and strtobool(Data.data['controls'][obj.name]):
-            obj.update(obj.name, False)
 
-    except ValueError:
-        pass
+def bedroom_temp():
+    current = int(Data.data['sensors']['boiler_temperature'])
+    target = int(Setting.objects.get(controller_name='hot_water_target_temperature').value)
+
+    if current > int(target * 1.1):
+        Boiler.update(Boiler.name, False)
+    elif current < int(target * 0.9):
+        Boiler.update(Boiler.name, True)
 
 
 def curtains():

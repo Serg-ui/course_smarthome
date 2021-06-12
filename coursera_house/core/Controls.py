@@ -9,7 +9,6 @@ class Data:
     default_alarms = {
         'smoke_detector': 'False',
         'cold_water': 'True',
-        'washing_machine': 'off',
         'leak_detector': 'False'}
     data_to_server = {}
 
@@ -26,7 +25,7 @@ class Data:
         cls.data_to_server = {}
 
     @classmethod
-    def compare(cls):
+    def compare_alarms(cls):
         diff = {k: cls.data['alarms'][k] for k in cls.data['alarms'] if
                 k in cls.default_alarms and cls.data['alarms'][k] != cls.default_alarms[k]}
         if diff:
@@ -66,7 +65,7 @@ class ColdWater(Controls):
         if event == Events.leak_detector.name:
             if value:
                 cls.switch(cls.OFF)
-                '''
+
                 send_mail(
                     'leak detector',
                     'leak detector = true',
@@ -74,7 +73,7 @@ class ColdWater(Controls):
                     [settings.EMAIL_RECEPIENT],
                     fail_silently=False,
                 )
-                '''
+
 
 class HotWater(Controls):
     name = Events.hot_water.name
