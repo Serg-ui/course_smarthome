@@ -1,9 +1,5 @@
 from enum import Enum
 
-FLAGS = {
-    'water_leak': False
-}
-
 
 class Events(Enum):
     leak_detector = 1
